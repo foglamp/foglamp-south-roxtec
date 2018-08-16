@@ -10,6 +10,8 @@ import copy
 import os
 import ssl
 import logging
+import uuid 
+import datetime
 
 from aiohttp import web
 
@@ -28,8 +30,6 @@ _LOGGER = logger.setup(__name__, level=logging.INFO)
 _FOGLAMP_DATA = os.getenv("FOGLAMP_DATA", default=None)
 _FOGLAMP_ROOT = os.getenv("FOGLAMP_ROOT", default='/usr/local/foglamp')
 
-_CONFIG_CATEGORY_NAME = 'HTTP_SOUTH'
-_CONFIG_CATEGORY_DESCRIPTION = 'South Plugin HTTP Listener'
 _DEFAULT_CONFIG = {
     'plugin': {
          'description': 'Roxtec South Plugin',
@@ -103,7 +103,8 @@ def plugin_start(data):
         loop = asyncio.get_event_loop()
 
         app = web.Application(middlewares=[middleware.error_middleware])
-        app.router.add_route('PUT', '/{}'.format(uri), HttpSouthIngest.render_post)
+        app.router.add_route('PUT', '/{}'.format(uri), RoxtecTransitIngest.render_put)
+        app.router.add_route('POST', '/{}'.format(uri), RoxtecTransitIngest.render_put)
         handler = app.make_handler()
 
         # SSL context
@@ -149,7 +150,7 @@ def plugin_reconfigure(handle, new_config):
         new_handle: new handle to be used in the future calls
     Raises:
     """
-    _LOGGER.info("Old config for HTTP south plugin {} \n new config {}".format(handle, new_config))
+    _LOGGER.info("Old config for Roxtec plugin {} \n new config {}".format(handle, new_config))
 
     # Find diff between old config and new config
     diff = utils.get_diff(handle, new_config)
@@ -159,7 +160,7 @@ def plugin_reconfigure(handle, new_config):
         _plugin_stop(handle)
         new_handle = plugin_init(new_config)
         new_handle['restart'] = 'yes'
-        _LOGGER.info("Restarting HTTP south plugin due to change in configuration keys [{}]".format(', '.join(diff)))
+        _LOGGER.info("Restarting Roxtec plugin due to change in configuration keys [{}]".format(', '.join(diff)))
     else:
         new_handle = copy.deepcopy(new_config)
         new_handle['restart'] = 'no'
@@ -217,12 +218,12 @@ def get_certificate(cert_name):
 
     return cert, key
 
-class RoxtexTransitIngest(object):
+class RoxtecTransitIngest(object):
     """Handles incoming sensor readings from HTTP Listener"""
 
     @staticmethod
-    async def render_post(request):
-        """Store sensor readings from http_south to FogLAMP
+    async def render_put(request):
+        """Store sensor readings from Roxtec to FogLAMP
 
         Args:
             request:
@@ -244,7 +245,6 @@ class RoxtexTransitIngest(object):
         Example:
             curl -X PUT http://localhost:1608/transit -d '[{ "guard_id": "444DF705F0F8", "gateway_id": "device-0" "state": 70, "transit_id": "t11", "battery": 4, "pressure": 722, "temperature": 0, "last_seen": 1533816739126 }]'
         """
-
         message = {'result': 'success'}
         try:
             if not Ingest.is_available():
@@ -260,9 +260,10 @@ class RoxtexTransitIngest(object):
                 raise ValueError('Payload block must be a valid list')
 
             for payload in payload_block:
-                asset = payload['guard_id']
+                asset = "Guard " + payload['guard_id']
                 epochMs = payload['last_seen'] / 1000.0
-                timestamp = datetime.datetime.fromtimestamp(s).strftime('%Y-%m-%d %H:%M:%S.%f')
+                timestamp = datetime.datetime.fromtimestamp(epochMs).strftime('%Y-%m-%d %H:%M:%S.%f')
+                key = str(uuid.uuid4())
                 readings = {
                     "gateway_id": payload['gateway_id'],
                     "state": payload['state'],
