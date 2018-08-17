@@ -267,11 +267,12 @@ class RoxtecTransitIngest(object):
                 readings = {
                     "gateway_id": payload['gateway_id'],
                     "state": payload['state'],
-                    "transit_id": payload['transit_id'],
                     "battery": payload['battery'],
                     "pressure": payload['pressure'],
                     "temperature": payload['temperature']
                 }
+                if 'transit_id' in payload:
+                    readings['transit_id'] = payload['transit_id']
 
                 await Ingest.add_readings(asset=asset, timestamp=timestamp, key=key, readings=readings)
             
