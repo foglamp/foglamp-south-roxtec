@@ -271,7 +271,7 @@ class RoxtecTransitIngest(object):
                     "pressure": payload['pressure'],
                     "temperature": payload['temperature']
                 }
-                if 'transit_id' in payload:
+                if 'transit_id' in payload and payload['transit_id'] is not None:
                     readings['transit_id'] = payload['transit_id']
 
                 await Ingest.add_readings(asset=asset, timestamp=timestamp, key=key, readings=readings)
