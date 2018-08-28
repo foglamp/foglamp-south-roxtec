@@ -31,11 +31,5 @@ set_files_ownership () {
     chown -R root:root /usr/local/foglamp/python/foglamp/plugins/south/roxtec
 }
 
-add_service () {
-    output=$(curl -sX POST http://localhost:8081/foglamp/service -d '{"name": "Roxtec South", "type": "south", "plugin": "roxtec", "enabled": true}')
-    echo ${output}
-}
-
 set_files_ownership
-add_service
 echo "Roxtec South plugin is installed."

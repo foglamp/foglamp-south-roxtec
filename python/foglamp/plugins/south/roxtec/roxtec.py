@@ -32,40 +32,46 @@ _FOGLAMP_ROOT = os.getenv("FOGLAMP_ROOT", default='/usr/local/foglamp')
 
 _DEFAULT_CONFIG = {
     'plugin': {
-         'description': 'Roxtec South Plugin',
-         'type': 'string',
-         'default': 'roxtec'
+        'description': 'Roxtec South Plugin',
+        'type': 'string',
+        'default': 'roxtec',
+        'readonly': 'true'
     },
     'port': {
         'description': 'Port to listen on',
         'type': 'integer',
         'default': '8608',
+        'order': '3'
     },
     'httpsPort': {
         'description': 'Port to accept HTTPS connections on',
         'type': 'integer',
-        'default': '1608'
+        'default': '1608',
+        'order': '4'
     },
     'enableHttp': {
         'description': 'Enable HTTP connections',
         'type': 'boolean',
-        'default': 'false'
+        'default': 'false',
+        'order': '5'
     },
     'certificateName': {
         'description': 'Certificate file name',
         'type': 'string',
-        'default': 'foglamp'
+        'default': 'foglamp',
+        'order': '6'
     },
-
     'host': {
         'description': 'Address to accept data on',
         'type': 'string',
         'default': '0.0.0.0',
+        'order': '1'
     },
     'uri': {
         'description': 'URI to accept data on',
         'type': 'string',
         'default': 'transit',
+        'order': '2'
     }
 }
 
@@ -157,7 +163,7 @@ def plugin_reconfigure(handle, new_config):
 
     # Plugin should re-initialize and restart if key configuration is changed
     if 'port' in diff or 'httpsPort' in diff or 'certificateName' in diff or 'enableHttp' in diff or 'host' in diff:
-        _plugin_stop(handle)
+        plugin_shutdown(handle)
         new_handle = plugin_init(new_config)
         new_handle['restart'] = 'yes'
         _LOGGER.info("Restarting Roxtec plugin due to change in configuration keys [{}]".format(', '.join(diff)))
