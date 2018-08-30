@@ -41,19 +41,19 @@ _DEFAULT_CONFIG = {
         'description': 'Port to listen on',
         'type': 'integer',
         'default': '8608',
-        'order': '3'
+        'order': '2'
     },
     'httpsPort': {
         'description': 'Port to accept HTTPS connections on',
         'type': 'integer',
         'default': '1608',
-        'order': '4'
+        'order': '5'
     },
     'enableHttp': {
         'description': 'Enable HTTP connections',
         'type': 'boolean',
         'default': 'false',
-        'order': '5'
+        'order': '4'
     },
     'certificateName': {
         'description': 'Certificate file name',
@@ -71,7 +71,7 @@ _DEFAULT_CONFIG = {
         'description': 'URI to accept data on',
         'type': 'string',
         'default': 'transit',
-        'order': '2'
+        'order': '3'
     }
 }
 
