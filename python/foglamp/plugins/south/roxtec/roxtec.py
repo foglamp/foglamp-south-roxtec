@@ -178,14 +178,8 @@ def plugin_reconfigure(handle, new_config):
     """
     _LOGGER.info("Old config for Roxtec plugin {} \n new config {}".format(handle, new_config))
     global loop
-
-    # plugin shutdown
     plugin_shutdown(handle)
-
-    # plugin init
     new_handle = plugin_init(new_config)
-
-    # plugin start
     plugin_start(new_handle)
 
     return new_handle
@@ -266,7 +260,7 @@ class RoxtecTransitIngest(object):
 
         {
                     "guard_id": "444DF705F0F8",
-                    "gateway_id": "device-0"
+                    "gateway_id": "device-0",
                     "state": 70,
                     "transit_id": "t11",
                     "battery": 4,
@@ -276,7 +270,8 @@ class RoxtecTransitIngest(object):
                 }
 
         Example:
-            curl -X PUT http://localhost:1608/transit -d '[{ "guard_id": "444DF705F0F8", "gateway_id": "device-0" "state": 70, "transit_id": "t11", "battery": 4, "pressure": 722, "temperature": 0, "last_seen": 1533816739126 }]'
+            curl --insecure -X PUT https://localhost:1608/transit -d '[{ "guard_id": "444DF705F0F8", "gateway_id": "device-0", "state": 70, "transit_id": "t11", "battery": 4, "pressure": 722, "temperature": 0, "last_seen": 1533816739126 }]'
+            curl -X PUT http://localhost:8608/transit -d '[{ "guard_id": "444DF705F0F8", "gateway_id": "device-0", "state": 70, "transit_id": "t11", "battery": 4, "pressure": 722, "temperature": 0, "last_seen": 1533816739126 }]'
         """
         try:
             message = {'result': 'success'}
