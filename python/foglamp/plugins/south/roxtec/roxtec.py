@@ -177,6 +177,7 @@ def plugin_reconfigure(handle, new_config):
     Raises:
     """
     _LOGGER.info("Old config for Roxtec plugin {} \n new config {}".format(handle, new_config))
+
     global loop
     plugin_shutdown(handle)
     new_handle = plugin_init(new_config)
@@ -193,7 +194,8 @@ def plugin_shutdown(handle):
     Returns:
     Raises:
     """
-    _LOGGER.info('Roxtec Transit plugin shut down.')
+    _LOGGER.info('Roxtec Transit plugin shutting down.')
+
     global loop
     try:
         app = handle['app']
