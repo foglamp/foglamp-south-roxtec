@@ -6,3 +6,6 @@ packages/build/
 
 # Compiled Object files
 *.pyc
+
+# Test
+.pytest_cache
