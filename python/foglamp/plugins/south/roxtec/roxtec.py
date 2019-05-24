@@ -10,17 +10,18 @@ import copy
 import os
 import ssl
 import logging
-import uuid 
+import uuid
 import datetime
 
+from threading import Thread
 from aiohttp import web
 
 from foglamp.common import logger
 from foglamp.common.web import middleware
 from foglamp.plugins.common import utils
-from foglamp.services.south.ingest import Ingest
+import async_ingest
 
-__author__ = "Mark Riddoch"
+__author__ = "Mark Riddoch, Ashish Jabble"
 __copyright__ = "Copyright (c) 2018 Dianomic Systems"
 __license__ = "Apache 2.0"
 __version__ = "${VERSION}"
@@ -30,54 +31,70 @@ _LOGGER = logger.setup(__name__, level=logging.INFO)
 _FOGLAMP_DATA = os.getenv("FOGLAMP_DATA", default=None)
 _FOGLAMP_ROOT = os.getenv("FOGLAMP_ROOT", default='/usr/local/foglamp')
 
+c_callback = None
+c_ingest_ref = None
+loop = None
+t = None
 _DEFAULT_CONFIG = {
     'plugin': {
-         'description': 'Roxtec South Plugin',
-         'type': 'string',
-         'default': 'roxtec'
+        'description': 'Roxtec South Plugin',
+        'type': 'string',
+        'default': 'roxtec',
+        'readonly': 'true'
     },
     'port': {
         'description': 'Port to listen on',
         'type': 'integer',
         'default': '8608',
+        'order': '2',
+        'displayName': 'Port'
     },
     'httpsPort': {
         'description': 'Port to accept HTTPS connections on',
         'type': 'integer',
-        'default': '1608'
+        'default': '1608',
+        'order': '5',
+        'displayName': 'Https Port'
     },
     'enableHttp': {
         'description': 'Enable HTTP connections',
         'type': 'boolean',
-        'default': 'false'
+        'default': 'false',
+        'order': '4',
+        'displayName': 'Enable Http'
     },
     'certificateName': {
         'description': 'Certificate file name',
         'type': 'string',
-        'default': 'foglamp'
+        'default': 'foglamp',
+        'order': '6',
+        'displayName': 'Certificate Name'
     },
-
     'host': {
         'description': 'Address to accept data on',
         'type': 'string',
         'default': '0.0.0.0',
+        'order': '1',
+        'displayName': 'Host'
     },
     'uri': {
         'description': 'URI to accept data on',
         'type': 'string',
         'default': 'transit',
+        'order': '3',
+        'displayName': 'URI'
     }
 }
 
 
 def plugin_info():
     return {
-            'name': 'Roxtec Trsnsit',
-            'version': '1.0',
-            'mode': 'async',
-            'type': 'south',
-            'interface': '1.0',
-            'config': _DEFAULT_CONFIG
+        'name': 'Roxtec Transit',
+        'version': '1.5.0',
+        'mode': 'async',
+        'type': 'south',
+        'interface': '1.0',
+        'config': _DEFAULT_CONFIG
     }
 
 
@@ -90,22 +107,24 @@ def plugin_init(config):
         handle: JSON object to be used in future calls to the plugin
     Raises:
     """
-    handle = config
+    handle = copy.deepcopy(config)
     return handle
 
 
 def plugin_start(data):
+    global loop, t
+
     try:
         host = data['host']['value']
         port = data['port']['value']
         uri = data['uri']['value']
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.new_event_loop()
 
-        app = web.Application(middlewares=[middleware.error_middleware])
+        app = web.Application(middlewares=[middleware.error_middleware], loop=loop)
         app.router.add_route('PUT', '/{}'.format(uri), RoxtecTransitIngest.render_put)
         app.router.add_route('POST', '/{}'.format(uri), RoxtecTransitIngest.render_put)
-        handler = app.make_handler()
+        handler = app.make_handler(loop=loop)
 
         # SSL context
         ssl_ctx = None
@@ -113,14 +132,14 @@ def plugin_start(data):
         is_https = True if data['enableHttp']['value'] == 'false' else False
         if is_https:
             port = data['httpsPort']['value']
-            cert_name =  data['certificateName']['value']
+            cert_name = data['certificateName']['value']
             ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
             cert, key = get_certificate(cert_name)
             _LOGGER.info('Loading TLS certificate %s and key %s', cert, key)
             ssl_ctx.load_cert_chain(cert, key)
 
         server_coro = loop.create_server(handler, host, port, ssl=ssl_ctx)
-        future = asyncio.ensure_future(server_coro)
+        future = asyncio.ensure_future(server_coro, loop=loop)
 
         data['app'] = app
         data['handler'] = handler
@@ -133,6 +152,13 @@ def plugin_start(data):
             data['server'] = f.result()
 
         future.add_done_callback(f_callback)
+
+        def run():
+            global loop
+            loop.run_forever()
+
+        t = Thread(target=run)
+        t.start()
     except Exception as e:
         _LOGGER.exception(str(e))
 
@@ -152,37 +178,12 @@ def plugin_reconfigure(handle, new_config):
     """
     _LOGGER.info("Old config for Roxtec plugin {} \n new config {}".format(handle, new_config))
 
-    # Find diff between old config and new config
-    diff = utils.get_diff(handle, new_config)
+    global loop
+    plugin_shutdown(handle)
+    new_handle = plugin_init(new_config)
+    plugin_start(new_handle)
 
-    # Plugin should re-initialize and restart if key configuration is changed
-    if 'port' in diff or 'httpsPort' in diff or 'certificateName' in diff or 'enableHttp' in diff or 'host' in diff:
-        _plugin_stop(handle)
-        new_handle = plugin_init(new_config)
-        new_handle['restart'] = 'yes'
-        _LOGGER.info("Restarting Roxtec plugin due to change in configuration keys [{}]".format(', '.join(diff)))
-    else:
-        new_handle = copy.deepcopy(new_config)
-        new_handle['restart'] = 'no'
     return new_handle
-
-
-def _plugin_stop(handle):
-    _LOGGER.info('Stopping Roxtec Transit plugin.')
-    try:
-        app = handle['app']
-        handler = handle['handler']
-        server = handle['server']
-
-        if server:
-            server.close()
-            asyncio.ensure_future(server.wait_closed())
-            asyncio.ensure_future(app.shutdown())
-            asyncio.ensure_future(handler.shutdown(60.0))
-            asyncio.ensure_future(app.cleanup())
-    except Exception as e:
-        _LOGGER.exception(str(e))
-        raise
 
 
 def plugin_shutdown(handle):
@@ -193,13 +194,40 @@ def plugin_shutdown(handle):
     Returns:
     Raises:
     """
-    _plugin_stop(handle)
-    _LOGGER.info('Roxtec Transit plugin shut down.')
+    _LOGGER.info('Roxtec Transit plugin shutting down.')
 
+    global loop
+    try:
+        app = handle['app']
+        handler = handle['handler']
+        server = handle['server']
+
+        if server:
+            server.close()
+            asyncio.ensure_future(server.wait_closed(), loop=loop)
+            asyncio.ensure_future(app.shutdown(), loop=loop)
+            asyncio.ensure_future(handler.shutdown(60.0), loop=loop)
+            asyncio.ensure_future(app.cleanup(), loop=loop)
+        loop.stop()
+    except Exception as e:
+        _LOGGER.exception(str(e))
+        raise
+
+
+def plugin_register_ingest(handle, callback, ingest_ref):
+    """Required plugin interface component to communicate to South C server
+
+    Args:
+        handle: handle returned by the plugin initialisation call
+        callback: C opaque object required to passed back to C->ingest method
+        ingest_ref: C opaque object required to passed back to C->ingest method
+    """
+    global c_callback, c_ingest_ref
+    c_callback = callback
+    c_ingest_ref = ingest_ref
 
 
 def get_certificate(cert_name):
-
     if _FOGLAMP_DATA:
         certs_dir = os.path.expanduser(_FOGLAMP_DATA + '/etc/certs')
     else:
@@ -218,8 +246,9 @@ def get_certificate(cert_name):
 
     return cert, key
 
+
 class RoxtecTransitIngest(object):
-    """Handles incoming sensor readings from HTTP Listener"""
+    """Handles incoming sensor readings from Roxtec Transit Listener"""
 
     @staticmethod
     async def render_put(request):
@@ -231,9 +260,9 @@ class RoxtecTransitIngest(object):
 
                 .. code-block:: python
 
-		{
+        {
                     "guard_id": "444DF705F0F8",
-                    "gateway_id": "device-0"
+                    "gateway_id": "device-0",
                     "state": 70,
                     "transit_id": "t11",
                     "battery": 4,
@@ -243,26 +272,19 @@ class RoxtecTransitIngest(object):
                 }
 
         Example:
-            curl -X PUT http://localhost:1608/transit -d '[{ "guard_id": "444DF705F0F8", "gateway_id": "device-0" "state": 70, "transit_id": "t11", "battery": 4, "pressure": 722, "temperature": 0, "last_seen": 1533816739126 }]'
+            curl --insecure -X PUT https://localhost:1608/transit -d '[{ "guard_id": "444DF705F0F8", "gateway_id": "device-0", "state": 70, "transit_id": "t11", "battery": 4, "pressure": 722, "temperature": 0, "last_seen": 1533816739126 }]'
+            curl -X PUT http://localhost:8608/transit -d '[{ "guard_id": "444DF705F0F8", "gateway_id": "device-0", "state": 70, "transit_id": "t11", "battery": 4, "pressure": 722, "temperature": 0, "last_seen": 1533816739126 }]'
         """
-        message = {'result': 'success'}
         try:
-            if not Ingest.is_available():
-                message = {'busy': True}
-                raise web.HTTPServiceUnavailable(reason=message)
-
-            try:
-                payload_block = await request.json()
-            except Exception:
-                raise ValueError('Payload block must be a valid json')
-
+            message = {'result': 'success'}
+            payload_block = await request.json()
             if type(payload_block) is not list:
                 raise ValueError('Payload block must be a valid list')
 
             for payload in payload_block:
                 asset = "Guard " + payload['guard_id']
-                epochMs = payload['last_seen'] / 1000.0
-                timestamp = datetime.datetime.fromtimestamp(epochMs).strftime('%Y-%m-%d %H:%M:%S.%f')
+                epoch_ms = payload['last_seen'] / 1000.0
+                timestamp = datetime.datetime.fromtimestamp(epoch_ms).strftime('%Y-%m-%d %H:%M:%S.%f')
                 key = str(uuid.uuid4())
                 readings = {
                     "gateway_id": payload['gateway_id'],
@@ -274,14 +296,17 @@ class RoxtecTransitIngest(object):
                 if 'transit_id' in payload and payload['transit_id'] is not None:
                     readings['transit_id'] = payload['transit_id']
 
-                await Ingest.add_readings(asset=asset, timestamp=timestamp, key=key, readings=readings)
-            
+                data = {
+                    'asset': asset,
+                    'timestamp': timestamp,
+                    'key': key,
+                    'readings': readings
+                }
+                async_ingest.ingest_callback(c_callback, c_ingest_ref, data)
         except (KeyError, ValueError, TypeError) as e:
-            Ingest.increment_discarded_readings()
             _LOGGER.exception("%d: %s", web.HTTPBadRequest.status_code, e)
             raise web.HTTPBadRequest(reason=e)
         except Exception as ex:
-            Ingest.increment_discarded_readings()
             _LOGGER.exception("%d: %s", web.HTTPInternalServerError.status_code, str(ex))
             raise web.HTTPInternalServerError(reason=str(ex))
 
