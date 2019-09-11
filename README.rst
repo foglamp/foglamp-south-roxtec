@@ -1,5 +1,5 @@
 ====================
-foglamp-south-roxtec
+fledge-south-roxtec
 ====================
 
-FogLAMP South Plugin for Roxtec Transit service.
+Fledge South Plugin for Roxtec Transit service.

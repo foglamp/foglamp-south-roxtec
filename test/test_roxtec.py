@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
 
-# FOGLAMP_BEGIN
-# See: http://foglamp.readthedocs.io/
-# FOGLAMP_END
+# FLEDGE_BEGIN
+# See: http://fledge.readthedocs.io/
+# FLEDGE_END
 
-"""Unit test for python.foglamp.plugins.south.roxtec"""
+"""Unit test for python.fledge.plugins.south.roxtec"""
 
 import pytest
 
-from python.foglamp.plugins.south.roxtec import roxtec
-from python.foglamp.plugins.south.roxtec.roxtec import _DEFAULT_CONFIG as config
+from python.fledge.plugins.south.roxtec import roxtec
+from python.fledge.plugins.south.roxtec.roxtec import _DEFAULT_CONFIG as config
 
 __author__ = "Ashish Jabble"
 __copyright__ = "Copyright (c) 2019 Dianomic Systems"
@@ -48,7 +48,7 @@ _NEW_CONFIG = {
     'certificateName': {
         'description': 'Certificate file name',
         'type': 'string',
-        'default': 'foglamp',
+        'default': 'fledge',
         'order': '6',
         'displayName': 'Certificate Name'
     },
