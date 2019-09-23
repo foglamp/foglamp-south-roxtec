@@ -90,7 +90,7 @@ _DEFAULT_CONFIG = {
 def plugin_info():
     return {
         'name': 'Roxtec Transit',
-        'version': '1.5.0',
+        'version': '1.7.0',
         'mode': 'async',
         'type': 'south',
         'interface': '1.0',
