@@ -10,7 +10,6 @@ import copy
 import os
 import ssl
 import logging
-import uuid
 import datetime
 
 from threading import Thread
@@ -285,7 +284,6 @@ class RoxtecTransitIngest(object):
                 asset = "Guard " + payload['guard_id']
                 epoch_ms = payload['last_seen'] / 1000.0
                 timestamp = datetime.datetime.fromtimestamp(epoch_ms).strftime('%Y-%m-%d %H:%M:%S.%f')
-                key = str(uuid.uuid4())
                 readings = {
                     "gateway_id": payload['gateway_id'],
                     "state": payload['state'],
@@ -299,7 +297,6 @@ class RoxtecTransitIngest(object):
                 data = {
                     'asset': asset,
                     'timestamp': timestamp,
-                    'key': key,
                     'readings': readings
                 }
                 async_ingest.ingest_callback(c_callback, c_ingest_ref, data)
